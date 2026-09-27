@@ -1,53 +1,33 @@
-name: Extract Sonic data.win
+name: Dump SONIC 2011 data.win
 
 on:
   workflow_dispatch:
 
 jobs:
-  extract:
+  dump:
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Start Sonic
+      - name: Run SONIC 2011 Unenigmatic
         shell: pwsh
         run: |
-          $sonic = Start-Process `
-            -FilePath "${{ github.workspace }}\sonic.exe" `
-            -WorkingDirectory "${{ github.workspace }}" `
-            -PassThru
+          .\inject.exe
 
-          Write-Host "Sonic PID: $($sonic.Id)"
-
-          Start-Sleep -Seconds 5
-
-      - name: Inject hook
+      - name: Check dump
         shell: pwsh
         run: |
-          & "${{ github.workspace }}\inject.exe"
-
-      - name: Wait for data.win
-        shell: pwsh
-        run: |
-          $timeout = 60
-          $elapsed = 0
-
-          while (-not (Test-Path "${{ github.workspace }}\dump\datawin.dump")) {
-            if ($elapsed -ge $timeout) {
-              Write-Error "data.win não apareceu dentro do tempo limite."
+          if (-not (Test-Path "./dump/datawin.dump")) {
+              Write-Error "datawin.dump não foi criado."
               exit 1
-            }
-
-            Start-Sleep -Seconds 1
-            $elapsed++
           }
 
-          Write-Host "data.win encontrado!"
+          Get-Item "./dump/datawin.dump"
 
-      - name: Upload data.win
+      - name: Upload data.win dump
         uses: actions/upload-artifact@v4
         with:
           name: sonic-data-win
-          path: data.win
+          path: dump/datawin.dump
