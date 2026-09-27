@@ -1,0 +1,53 @@
+name: Extract Sonic data.win
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start Sonic
+        shell: pwsh
+        run: |
+          $sonic = Start-Process `
+            -FilePath "${{ github.workspace }}\sonic.exe" `
+            -WorkingDirectory "${{ github.workspace }}" `
+            -PassThru
+
+          Write-Host "Sonic PID: $($sonic.Id)"
+
+          Start-Sleep -Seconds 5
+
+      - name: Inject hook
+        shell: pwsh
+        run: |
+          & "${{ github.workspace }}\inject.exe"
+
+      - name: Wait for data.win
+        shell: pwsh
+        run: |
+          $timeout = 60
+          $elapsed = 0
+
+          while (-not (Test-Path "${{ github.workspace }}\data.win")) {
+            if ($elapsed -ge $timeout) {
+              Write-Error "data.win não apareceu dentro do tempo limite."
+              exit 1
+            }
+
+            Start-Sleep -Seconds 1
+            $elapsed++
+          }
+
+          Write-Host "data.win encontrado!"
+
+      - name: Upload data.win
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonic-data-win
+          path: data.win
