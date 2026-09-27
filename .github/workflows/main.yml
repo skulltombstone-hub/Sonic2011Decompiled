@@ -34,7 +34,7 @@ jobs:
           $timeout = 60
           $elapsed = 0
 
-          while (-not (Test-Path "${{ github.workspace }}\data.win")) {
+          while (-not (Test-Path "${{ github.workspace }}\dump\datawin.dump")) {
             if ($elapsed -ge $timeout) {
               Write-Error "data.win não apareceu dentro do tempo limite."
               exit 1
