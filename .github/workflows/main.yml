@@ -11,23 +11,104 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify required files
+        shell: pwsh
+        run: |
+          $required = @(
+            ".\sonic.exe",
+            ".\inject.exe",
+            ".\hook.dll"
+          )
+
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Arquivo obrigatório não encontrado: $file"
+              exit 1
+            }
+
+            Get-Item $file | Format-List FullName, Length
+          }
+
+      - name: Clean previous dump
+        shell: pwsh
+        run: |
+          if (Test-Path ".\dump") {
+            Remove-Item ".\dump" -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path ".\dump" | Out-Null
+
       - name: Run SONIC 2011 Unenigmatic
         shell: pwsh
         run: |
-          .\inject.exe
+          Write-Host "Executando inject.exe..."
+          Write-Host "O injector irá iniciar sonic.exe suspenso,"
+          Write-Host "injetar hook.dll e então liberar o processo."
+
+          $inject = Start-Process `
+            -FilePath ".\inject.exe" `
+            -WorkingDirectory "${{ github.workspace }}" `
+            -PassThru `
+            -Wait
+
+          Write-Host "inject.exe terminou com código: $($inject.ExitCode)"
+
+          if ($inject.ExitCode -ne 0) {
+            Write-Error "inject.exe falhou."
+            exit $inject.ExitCode
+          }
 
       - name: Check dump
         shell: pwsh
         run: |
-          if (-not (Test-Path "./dump/datawin.dump")) {
-              Write-Error "datawin.dump não foi criado."
-              exit 1
+          $dump = ".\dump\datawin.dump"
+
+          if (-not (Test-Path $dump)) {
+            Write-Error "datawin.dump não foi criado."
+            exit 1
           }
 
-          Get-Item "./dump/datawin.dump"
+          $file = Get-Item $dump
+
+          Write-Host "Dump encontrado:"
+          Write-Host "Path: $($file.FullName)"
+          Write-Host "Size: $($file.Length) bytes"
+
+          if ($file.Length -le 112) {
+            Write-Error "O dump possui apenas $($file.Length) bytes e provavelmente não contém o data.win completo."
+            exit 1
+          }
+
+          Write-Host "Dump possui tamanho superior ao arquivo inicial esperado."
+
+      - name: Show hook log
+        if: always()
+        shell: pwsh
+        run: |
+          $log = ".\dump\hook.log"
+
+          if (Test-Path $log) {
+            Write-Host "===== hook.log ====="
+            Get-Content $log
+            Write-Host "===================="
+          }
+          else {
+            Write-Host "hook.log não foi criado."
+          }
 
       - name: Upload data.win dump
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: sonic-data-win
           path: dump/datawin.dump
+
+      - name: Upload diagnostic files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonic-dump-diagnostics
+          path: |
+            dump/hook.log
+            dump/datawin.dump
+          if-no-files-found: ignore
